@@ -42,14 +42,16 @@ def upload_to_github(content, filename, repo="anishd/archiveorgplaylists", branc
     token = os.environ.get("GITHUB_TOKEN")
     if not token:
         print("Error: GITHUB_TOKEN environment variable not set.")
-        print("Please set it with: export GITHUB_TOKEN='your_token' (Mac/Linux) or $env:GITHUB_TOKEN='your_token' (PowerShell)")
+        print("Please verify your .env file exists in the project root directory.")
         sys.exit(1)
         
     url = f"https://github.com{repo}/contents/{filename}"
+    
+    # 1. Base Headers used for both checking and uploading
     headers = {
         "Authorization": f"token {token}",
         "Accept": "application/vnd.github.v3+json",
-        "User-Agent": "Parchive-App"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ParchiveApp/1.0"
     }
     
     # Check if file exists to get its SHA (required for file updates)
@@ -60,8 +62,9 @@ def upload_to_github(content, filename, repo="anishd/archiveorgplaylists", branc
             data = json.loads(response.read().decode('utf-8'))
             sha = data.get("sha")
     except Exception:
-        pass # File doesn't exist yet
+        pass # File doesn't exist yet, which is fine
 
+    # 2. Construct Payload
     payload = {
         "message": f"Automated update for playlist: {filename}",
         "content": base64.b64encode(content.encode("utf-8")).decode("utf-8"),
@@ -70,11 +73,20 @@ def upload_to_github(content, filename, repo="anishd/archiveorgplaylists", branc
     if sha:
         payload["sha"] = sha
 
+    # Encode payload to bytes
+    json_data = json.dumps(payload).encode("utf-8")
+    
+    # 3. Add explicit Content-Length and Content-Type to prevent Windows 10054 drops
+    upload_headers = headers.copy()
+    upload_headers["Content-Type"] = "application/json"
+    upload_headers["Content-Length"] = str(len(json_data))
+    upload_headers["Connection"] = "close" # Disables keep-alive to avoid socket reuse drops
+
     try:
         req = urllib.request.Request(
             url, 
-            data=json.dumps(payload).encode("utf-8"), 
-            headers=headers, 
+            data=json_data, 
+            headers=upload_headers, 
             method="PUT"
         )
         with urllib.request.urlopen(req) as response:
@@ -82,6 +94,7 @@ def upload_to_github(content, filename, repo="anishd/archiveorgplaylists", branc
                 print(f"Successfully uploaded {filename} to GitHub repository {repo}!")
     except Exception as e:
         print(f"Failed to upload to GitHub: {e}")
+
 
 def main():
     if len(sys.argv) < 2:
