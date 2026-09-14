@@ -81,7 +81,7 @@ def update_static_dashboard(output_dir):
     print(f"🖥️  Updated dashboard interface at: {html_path}")
 
 def save_local_playlist(content, filename):
-    output_dir = "output"
+    output_dir = "docs"
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
         
