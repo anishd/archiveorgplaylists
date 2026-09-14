@@ -6,6 +6,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+import sys
+import os
+import re
+import urllib.request
+import urllib.parse  # <-- 1. ADD THIS IMPORT FOR URL ENCODING
+from dotenv import load_dotenv
+
+load_dotenv()
+
 def get_m3u_playlist(url):
     if "/details/" in url:
         url = url.replace("/details/", "/download/")
@@ -29,11 +38,21 @@ def get_m3u_playlist(url):
         
     m3u_lines = ["#EXTM3U"]
     for match in matches:
-        filename = match if isinstance(match, str) else match
+        # FIX: Since match is a tuple (filename, extension), grab the first item
+        filename = match[0] if isinstance(match, tuple) else match
+        
+        # Skip processing index tracking system or thumbnail image strings
+        if filename.endswith(('.jpg', '.png', '.xml', '.sqlite', '.torrent')):
+            continue
+            
         m3u_lines.append(f"#EXTINF:-1,{filename}")
-        m3u_lines.append(f"{url}{filename}")
+        
+        # URL-encode the filename to replace spaces with %20 so VLC doesn't throw MRL errors
+        safe_filename = urllib.parse.quote(filename)
+        m3u_lines.append(f"{url}{safe_filename}")
         
     return "\n".join(m3u_lines), url.split("/")[-2]
+
 
 def update_static_dashboard(output_dir):
     """Scans the output directory and updates an iOS 9 compatible index.html."""
