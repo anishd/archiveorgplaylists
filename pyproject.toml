@@ -1,0 +1,20 @@
+[project]
+name = "archiveorgplaylists"
+version = "0.1.0"
+description = "Archive playlist"
+readme = "README.md"
+authors = [
+    { name = "Anishd", email = "anishdantale@hotmil.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "python-dotenv>=1.2.3",
+]
+
+[project.scripts]
+archiveorgplaylists = "archiveorgplaylists:main"
+parchive = "archiveorgplaylists.archive_to_m3u:main"
+
+[build-system]
+requires = ["uv_build>=0.12.9,<0.13.0"]
+build-backend = "uv_build"
