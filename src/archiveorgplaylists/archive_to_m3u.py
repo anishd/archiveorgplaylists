@@ -2,14 +2,11 @@ import sys
 import os
 import re
 import urllib.request
-import base64
-import json
-from dotenv import load_dotenv  # <-- Add import
+from dotenv import load_dotenv
 
-load_dotenv()  # <-- Execute here
+load_dotenv()
 
 def get_m3u_playlist(url):
-    # Standardize details URL to download directory URL
     if "/details/" in url:
         url = url.replace("/details/", "/download/")
     url = url.rstrip("/") + "/"
@@ -20,10 +17,9 @@ def get_m3u_playlist(url):
         with urllib.request.urlopen(req) as response:
             html = response.read().decode('utf-8')
     except Exception as e:
-        print(f"Error fetching URL: {e}")
+        print(f"Error fetching Archive URL: {e}")
         sys.exit(1)
         
-    # Extracted fix for string quotes in regex pattern
     video_pattern = re.compile(r"""href=["']([^"']+\.(mp4|mkv|avi|ogv|mov|mp3|wav|flac|ogg))["']""", re.IGNORECASE)
     matches = video_pattern.findall(html)
     
@@ -32,83 +28,88 @@ def get_m3u_playlist(url):
         sys.exit(1)
         
     m3u_lines = ["#EXTM3U"]
-    for filename, ext in matches:
+    for match in matches:
+        filename = match if isinstance(match, str) else match
         m3u_lines.append(f"#EXTINF:-1,{filename}")
         m3u_lines.append(f"{url}{filename}")
         
     return "\n".join(m3u_lines), url.split("/")[-2]
 
-def upload_to_github(content, filename, repo="anishd/archiveorgplaylists", branch="main"):
-    token = os.environ.get("GITHUB_TOKEN")
-    if not token:
-        print("Error: GITHUB_TOKEN environment variable not set.")
-        print("Please verify your .env file exists in the project root directory.")
-        sys.exit(1)
+def update_static_dashboard(output_dir):
+    """Scans the output directory and updates an iOS 9 compatible index.html."""
+    html_path = os.path.join(output_dir, "index.html")
+    
+    # Locate all generated .m3u files in the folder
+    files = [f for f in os.listdir(output_dir) if f.endswith(".m3u")]
+    
+    # Old-school clean HTML structure safe for iOS 9 Safari (No complex layouts)
+    html_start = """<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Archive Playlists</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #121212; color: #ffffff; padding: 20px; }
+        h1 { color: #00ffcc; border-bottom: 2px solid #333; padding-bottom: 10px; font-size: 24px; }
+        ul { list-style-type: none; padding: 0; margin: 20px 0; }
+        li { margin: 12px 0; background: #1e1e1e; padding: 15px; border-radius: 4px; border: 1px solid #2d2d2d; }
+        a { color: #33b5e5; text-decoration: none; font-size: 18px; font-weight: bold; display: block; }
+        a:hover { text-decoration: underline; }
+        .info { color: #888; font-size: 12px; margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <h1>📺 Archive Playlists Dashboard</h1>
+    <ul>
+"""
+
+    html_end = """    </ul>
+</body>
+</html>"""
+
+    list_items = []
+    for f in sorted(files):
+        # Format a clean user-friendly display name
+        display_name = f.replace(".m3u", "").replace("_", " ").title()
+        list_items.append(f'        <li><a href="{f}">▶ {display_name}</a><div class="info">Format: VLC Playlist File (.m3u)</div></li>')
+
+    full_html = html_start + "\n".join(list_items) + "\n" + html_end
+
+    with open(html_path, "w", encoding="utf-8") as html_file:
+        html_file.write(full_html)
+    print(f"🖥️  Updated dashboard interface at: {html_path}")
+
+def save_local_playlist(content, filename):
+    output_dir = "output"
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
         
-    url = f"https://github.com{repo}/contents/{filename}"
+    file_path = os.path.join(output_dir, filename)
     
-    # 1. Base Headers used for both checking and uploading
-    headers = {
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3+json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ParchiveApp/1.0"
-    }
-    
-    # Check if file exists to get its SHA (required for file updates)
-    sha = None
     try:
-        req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req) as response:
-            data = json.loads(response.read().decode('utf-8'))
-            sha = data.get("sha")
-    except Exception:
-        pass # File doesn't exist yet, which is fine
-
-    # 2. Construct Payload
-    payload = {
-        "message": f"Automated update for playlist: {filename}",
-        "content": base64.b64encode(content.encode("utf-8")).decode("utf-8"),
-        "branch": branch
-    }
-    if sha:
-        payload["sha"] = sha
-
-    # Encode payload to bytes
-    json_data = json.dumps(payload).encode("utf-8")
-    
-    # 3. Add explicit Content-Length and Content-Type to prevent Windows 10054 drops
-    upload_headers = headers.copy()
-    upload_headers["Content-Type"] = "application/json"
-    upload_headers["Content-Length"] = str(len(json_data))
-    upload_headers["Connection"] = "close" # Disables keep-alive to avoid socket reuse drops
-
-    try:
-        req = urllib.request.Request(
-            url, 
-            data=json_data, 
-            headers=upload_headers, 
-            method="PUT"
-        )
-        with urllib.request.urlopen(req) as response:
-            if response.status in [200, 201]:
-                print(f"Successfully uploaded {filename} to GitHub repository {repo}!")
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        print(f"✨ Success! Playlist saved locally to: {file_path}")
+        
+        # Build/recompile the HTML dashboard
+        update_static_dashboard(output_dir)
+        
     except Exception as e:
-        print(f"Failed to upload to GitHub: {e}")
-
+        print(f"Failed to write file locally: {e}")
 
 def main():
     if len(sys.argv) < 2:
         print("Usage: parchive <archive_url>")
         sys.exit(1)
         
-    target_url = sys.argv[1]
+    # FIX: Add [1] here to grab the actual URL argument string, not the list
+    target_url = sys.argv[1] 
+    
     m3u_content, identifier = get_m3u_playlist(target_url)
     
-    # Keeping files in root or specific folders for GitHub Pages parsing later
     filename = f"{identifier}.m3u"
-    
-    print(f"Generating playlist: {filename}...")
-    upload_to_github(m3u_content, filename)
+    save_local_playlist(m3u_content, filename)
 
 if __name__ == "__main__":
     main()
