@@ -81,22 +81,23 @@ def update_static_dashboard(output_dir):
     print(f"🖥️  Updated dashboard interface at: {html_path}")
 
 def save_local_playlist(content, filename):
-    output_dir = "docs"
-    if not os.path.exists(output_dir):
+    output_dir = "docs" 
+    if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir)
         
-    file_path = os.path.join(output_dir, filename)
+    file_path = os.path.join(output_dir, filename) if output_dir else filename
     
     try:
-        with open(file_path, "w", encoding="utf-8") as f:
+        # FIX: Added newline='\n' to force clean UNIX line breaks for iOS 9 VLC compatibility
+        with open(file_path, "w", encoding="utf-8", newline='\n') as f:
             f.write(content)
         print(f"✨ Success! Playlist saved locally to: {file_path}")
         
-        # Build/recompile the HTML dashboard
-        update_static_dashboard(output_dir)
+        update_static_dashboard(output_dir if output_dir else ".")
         
     except Exception as e:
         print(f"Failed to write file locally: {e}")
+
 
 def main():
     if len(sys.argv) < 2:
